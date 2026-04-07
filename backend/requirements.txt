@@ -7,6 +7,4 @@ deepface==0.0.93
 mediapipe==0.10.14
 Pillow==10.3.0
 scipy==1.13.0
-requests==2.31.0
-python-jose==3.3.0
 aiofiles==23.2.1
