@@ -9,11 +9,54 @@
 
 ---
 
-## 🎯 What is KAVACH?
+## 🚀 Quick Start (After Cloning)
 
-KAVACH is a production-grade KYC (Know Your Customer) verification system that uses **5 independent AI security layers** to detect and block identity fraud — including deepfakes, photo spoofs, video replays, and automated bots.
+### Prerequisites
+- [Python 3.10+](https://www.python.org/downloads/)
+- [Node.js 18+](https://nodejs.org/)
 
-Unlike systems that rely on a single ML model, KAVACH combines multiple weak signals into an unbreakable chain. Fraud must defeat **all 5 layers simultaneously** — statistically near impossible.
+### Option A — One Click (Windows)
+Just double-click **`setup_and_run.bat`** — it installs everything, builds the UI, and starts the server automatically.
+
+### Option B — Manual Steps
+
+**Step 1: Install Python dependencies**
+```bash
+cd backend
+pip install fastapi uvicorn python-multipart opencv-python numpy Pillow scipy aiofiles
+```
+
+**Step 2: Build the React frontend**
+```bash
+cd kavach-ui
+npm install
+npm run build
+```
+
+**Step 3: Start the server**
+```bash
+cd backend
+py -m uvicorn main:app --reload --port 8000
+```
+
+**Step 4: Open the app**
+
+Visit **http://localhost:8000** in your browser.
+
+> ⚠️ You must run `npm run build` after cloning — the build folder is not included in the repo.
+
+---
+
+## 🧪 Demo Scenarios (No Camera Needed)
+
+Click any scenario on the right panel to instantly see results:
+
+| Scenario | Attack Type | Result |
+|---|---|---|
+| ✅ Real User | Legitimate KYC | **SAFE** |
+| 📸 Photo Spoof | Static photo attack | **FRAUD** |
+| 🔄 Video Replay | Replay attack | **FRAUD** |
+| 🤖 Deepfake | AI-generated face | **FRAUD** |
 
 ---
 
@@ -21,59 +64,11 @@ Unlike systems that rely on a single ML model, KAVACH combines multiple weak sig
 
 | Layer | Technology | Weight |
 |---|---|---|
-| **Liveness Detection** | rPPG blood flow + random challenge-response + screen glare detection | 30% |
-| **Face Matching** | ArcFace deep identity verification (DeepFace) | 30% |
-| **Deepfake Detection** | FFT frequency artifacts + landmark jitter + optical flow + facial warping | 25% |
-| **Behavioral Analysis** | Device fingerprint + IP anomaly + timing analysis | 15% |
-| **Risk Scoring Engine** | Weighted fusion + hard gates + explainable AI verdict | — |
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-
-### 1. Start the Backend
-```bash
-cd backend
-pip install fastapi uvicorn python-multipart opencv-python numpy deepface mediapipe Pillow scipy aiofiles
-py -m uvicorn main:app --reload --port 8000
-```
-
-### 2. Build the Frontend
-```bash
-cd kavach-ui
-npm install
-npm run build
-```
-
-### 3. Open the App
-Visit **http://localhost:8000** — the backend serves the React UI directly. One server, one URL.
-
----
-
-## 🧪 Demo Scenarios
-
-The app includes 4 built-in demo scenarios (no camera needed):
-
-| Scenario | Attack Type | Expected Result |
-|---|---|---|
-| ✅ Real User | Legitimate KYC | **SAFE** |
-| 📸 Photo Spoof | Static photo held to camera | **FRAUD** |
-| 🔄 Video Replay | Previously recorded session | **FRAUD** |
-| 🤖 Deepfake | AI-generated face swap | **FRAUD** |
-
----
-
-## 🧠 Key Innovations
-
-- **rPPG (Remote Photoplethysmography)** — Detects real heartbeat through webcam green-channel analysis. Screens and photos have zero blood flow signal.
-- **Cryptographic Session Nonces** — Each session gets a unique single-use nonce. Replayed videos from old sessions are instantly blocked.
-- **FFT Frequency Analysis** — GAN-generated deepfakes leave checkerboard artifacts in frequency domain, invisible to humans but trivially detectable mathematically.
-- **Landmark Jitter Tracking** — Real faces have smooth landmark trajectories. Deepfakes show unnatural acceleration spikes.
-- **Fail-Closed Design** — Low confidence = SUSPICIOUS, never auto-approve. System fails safe.
+| **Liveness Detection** | rPPG blood flow + challenge-response + glare | 30% |
+| **Face Matching** | ArcFace deep identity verification | 30% |
+| **Deepfake Detection** | FFT + landmark jitter + optical flow | 25% |
+| **Behavioral Analysis** | Device + IP + timing anomaly | 15% |
+| **Risk Scoring Engine** | Weighted fusion + hard gates + explainable AI | — |
 
 ---
 
@@ -89,34 +84,25 @@ KAVACH/
 │   │   ├── behavior.py      # Layer 4: Behavioral context
 │   │   └── risk_engine.py   # Layer 5: Weighted risk scoring
 │   └── main.py              # FastAPI unified server
-└── kavach-ui/
-    └── src/
-        ├── components/      # Glassmorphism UI components
-        └── pages/           # KYC flow pages
+├── kavach-ui/
+│   └── src/
+│       ├── components/      # Glassmorphism UI components
+│       └── pages/           # KYC flow pages
+└── setup_and_run.bat        # One-click Windows setup
 ```
-
----
-
-## 🎨 UI Design
-
-- **Glassmorphism + Liquid Glass** hybrid design system
-- Animated KAVACH shield emblem
-- Live face bounding box with neon corner brackets
-- Real-time layer-by-layer analysis progress
-- Explainable AI verdict dashboard with per-signal breakdown
 
 ---
 
 ## 📊 Risk Scoring Formula
 
 ```
-weighted_score = (face_match × 0.30) + (liveness × 0.30) + (deepfake × 0.25) + (behavior × 0.15)
+weighted = (face_match × 0.30) + (liveness × 0.30) + (deepfake × 0.25) + (behavior × 0.15)
 
 SAFE        → weighted ≥ 75 AND no FAIL layers
 SUSPICIOUS  → weighted ≥ 55 AND ≤ 1 FAIL layer
 FRAUD       → weighted < 55 OR hard gate triggered
 
-Hard Gates (instant FRAUD regardless of score):
+Hard Gates (instant FRAUD):
   - Session nonce invalid (replay attack)
   - 3+ deepfake signals triggered simultaneously
   - Blurry/adversarial input detected
@@ -126,6 +112,4 @@ Hard Gates (instant FRAUD regardless of score):
 
 ## 🏆 Built For
 
-Hackathon — AI-Powered Fintech Security Track
-
-**Team:** KAVACH
+Hackathon — AI-Powered Fintech Security Track · **Team KAVACH**
