@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import KavachSymbol from './KavachSymbol';
+import KavachLogoAnimated from './KavachLogoAnimated';
 
 const LAYERS = [
   { label: 'Validating session nonce',      color: '#8b5cf6', icon: '🔐' },
@@ -22,47 +22,9 @@ export default function AnalyzingScreen() {
       exit={{ opacity: 0 }}
       style={{ padding: '36px 28px', textAlign: 'center' }}
     >
-      {/* Orbital scanner */}
-      <div style={{ position: 'relative', width: 130, height: 130, margin: '0 auto 32px' }}>
-        {/* Outer rings */}
-        {[0, 1, 2].map(i => (
-          <motion.div key={i}
-            style={{
-              position: 'absolute',
-              inset: i * 18,
-              borderRadius: '50%',
-              border: `1px solid rgba(${i === 0 ? '139,92,246' : i === 1 ? '6,182,212' : '0,245,160'},${0.5 - i * 0.1})`,
-            }}
-            animate={{ rotate: i % 2 === 0 ? 360 : -360 }}
-            transition={{ duration: 4 + i * 1.5, repeat: Infinity, ease: 'linear' }}
-          />
-        ))}
-        {/* Orbiting dot */}
-        <motion.div
-          style={{ position: 'absolute', inset: 0 }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-        >
-          <div style={{
-            position: 'absolute', top: 0, left: '50%',
-            transform: 'translateX(-50%)',
-            width: 7, height: 7, borderRadius: '50%',
-            background: '#8b5cf6',
-            boxShadow: '0 0 10px rgba(139,92,246,0.9)',
-          }} />
-        </motion.div>
-        {/* Center core */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <motion.div
-            animate={{ scale: [1, 1.12, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          >
-            <KavachSymbol size={44} glow animated />
-          </motion.div>
-        </div>
+      {/* Orbital scanner with KAVACH logo */}
+      <div style={{ margin: '0 auto 32px' }}>
+        <KavachLogoAnimated size={110} scanning />
       </div>
 
       <motion.h3

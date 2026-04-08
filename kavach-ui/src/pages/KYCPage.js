@@ -7,7 +7,7 @@ import AnalyzingScreen from '../components/AnalyzingScreen';
 import VerdictBanner from '../components/VerdictBanner';
 import LayerCard from '../components/LayerCard';
 import DemoPanel from '../components/DemoPanel';
-import KavachSymbol from '../components/KavachSymbol';
+import KavachLogoAnimated from '../components/KavachLogoAnimated';
 import { getChallenge, verifyKYC } from '../api';
 
 const RECORD_SECONDS = 15;
@@ -133,14 +133,14 @@ export default function KYCPage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           style={{ textAlign: 'center', marginBottom: 40 }}>
 
-          {/* KAVACH Symbol — large hero emblem */}
+          {/* KAVACH Logo — animated hero emblem */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.7 }}
+            initial={{ opacity: 0, scale: 0.6 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            style={{ display: 'inline-flex', marginBottom: 20 }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            style={{ display: 'inline-flex', marginBottom: 24 }}
           >
-            <KavachSymbol size={72} glow animated />
+            <KavachLogoAnimated size={96} scanning={false} />
           </motion.div>
 
           <div style={{
