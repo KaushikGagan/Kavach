@@ -38,9 +38,10 @@ def analyze_frequency_artifacts(frames: List[np.ndarray]) -> dict:
         scores.append(ratio)
 
     avg_ratio = float(np.mean(scores)) if scores else 0
-    # Empirically: real faces ~0.3-0.6, deepfakes often >0.7
-    is_deepfake = avg_ratio > 0.68
-    confidence = min(100, int(avg_ratio * 100))
+    # Raised threshold: webcam-compressed video naturally has HF ratio 0.5-0.8
+    # GAN deepfakes typically show > 1.2 due to checkerboard artifacts
+    is_deepfake = avg_ratio > 1.2
+    confidence  = min(100, int(avg_ratio * 60))
 
     return to_python({
         "hf_ratio": round(avg_ratio, 4),

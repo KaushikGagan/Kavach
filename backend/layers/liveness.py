@@ -181,16 +181,27 @@ def detect_frame_duplicates(frames: List[np.ndarray]) -> dict:
         return to_python({"is_replay": False, "duplicate_ratio": 0.0,
                           "detail": "Insufficient frames"})
 
+    # Use larger hash (32x32) and stricter similarity (0.995) to avoid
+    # false positives from webcam codec compression
     def phash(frame):
-        small = cv2.resize(frame, (16, 16))
+        small = cv2.resize(frame, (32, 32))
         gray  = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-        return (gray > gray.mean()).flatten()
+        return gray.flatten().astype(np.float32)
 
-    hashes    = [phash(f) for f in frames[::3]]
-    dups      = sum(float(np.mean(hashes[i] == hashes[i-1])) > 0.97
-                    for i in range(1, len(hashes)))
+    hashes    = [phash(f) for f in frames[::2]]
+    dups      = 0
+    for i in range(1, len(hashes)):
+        # Use normalized correlation instead of binary hash
+        h1, h2 = hashes[i-1], hashes[i]
+        norm1, norm2 = np.linalg.norm(h1), np.linalg.norm(h2)
+        if norm1 > 0 and norm2 > 0:
+            corr = float(np.dot(h1, h2) / (norm1 * norm2))
+            if corr > 0.9995:  # extremely strict — only true duplicates
+                dups += 1
+
     dup_ratio = float(dups) / max(len(hashes) - 1, 1)
-    is_replay = dup_ratio > 0.5
+    # Only flag as replay if >80% frames are truly identical
+    is_replay = dup_ratio > 0.80
 
     return to_python({
         "duplicate_ratio": round(dup_ratio, 3), "is_replay": is_replay,
