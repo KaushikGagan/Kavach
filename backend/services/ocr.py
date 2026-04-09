@@ -104,16 +104,22 @@ def _extract_name_from_text(text: str) -> Optional[str]:
             if 2 <= len(candidate.split()) <= 5:
                 return candidate
 
-    # Pattern 2: All-caps line with 2-4 words (common in Aadhaar/PAN)
+    # Pattern 2: All-caps line with 2-6 words (common in Aadhaar/PAN/Passport)
     for line in lines:
         words = line.split()
-        if 2 <= len(words) <= 4 and all(w.isupper() and w.isalpha() for w in words):
+        if 2 <= len(words) <= 6 and all(w.isupper() and w.isalpha() for w in words):
             return line
 
-    # Pattern 3: Title-case line with 2-4 words
+    # Pattern 3: Title-case line with 2-6 words
     for line in lines:
         words = line.split()
-        if 2 <= len(words) <= 4 and all(w.istitle() and w.isalpha() for w in words):
+        if 2 <= len(words) <= 6 and all(w.istitle() and w.isalpha() for w in words):
+            return line
+
+    # Pattern 4: Mixed case line that looks like a name (no digits, 2-6 words)
+    for line in lines:
+        words = line.split()
+        if 2 <= len(words) <= 6 and all(w.isalpha() and len(w) >= 2 for w in words):
             return line
 
     return None
@@ -165,56 +171,67 @@ def extract_text(image_b64: str) -> dict:
 def match_name(ocr_result: dict, expected_name: str) -> dict:
     """
     Compare OCR-extracted name against user-provided name.
-    Uses normalized comparison (lowercase, no spaces/punctuation).
-    Also checks if expected name appears anywhere in the full OCR text.
+    Handles long Indian names with multiple parts.
     """
     if not ocr_result.get("success") or not expected_name:
         return to_python({
-            "matched":    False,
-            "ocr_score":  40,
-            "method":     "skipped",
-            "detail":     "OCR failed or no name provided",
+            "matched":   False,
+            "ocr_score": 40,
+            "method":    "skipped",
+            "detail":    "OCR failed or no name provided",
         })
 
     norm_expected = _normalize_name(expected_name)
     clean_text    = _normalize_name(ocr_result.get("clean_text", ""))
     extracted     = ocr_result.get("extracted_name")
 
-    # Method 1: Direct name field match
+    # Method 1: Exact name field match
     if extracted:
         norm_extracted = _normalize_name(extracted)
         if norm_expected == norm_extracted:
             return to_python({"matched": True, "ocr_score": 100,
                               "method": "exact_name_field",
                               "detail": f"Name field exact match: '{extracted}'"})
-
-        # Partial match — expected name is substring of extracted or vice versa
         if norm_expected in norm_extracted or norm_extracted in norm_expected:
             return to_python({"matched": True, "ocr_score": 85,
                               "method": "partial_name_field",
                               "detail": f"Name field partial match: '{extracted}'"})
 
-    # Method 2: Expected name appears anywhere in OCR text
+    # Method 2: Full name in OCR text
     if len(norm_expected) >= 4 and norm_expected in clean_text:
-        return to_python({"matched": True, "ocr_score": 75,
+        return to_python({"matched": True, "ocr_score": 80,
                           "method": "text_contains_name",
-                          "detail": f"Name found in document text"})
+                          "detail": "Full name found in document text"})
 
-    # Method 3: Check individual name parts (first/last name)
+    # Method 3: Individual name parts (handles long Indian names)
+    # Split into parts, require majority to match
     name_parts = [p for p in norm_expected.split() if len(p) >= 3]
     if name_parts:
-        matched_parts = sum(1 for p in name_parts if p in clean_text)
-        ratio = matched_parts / len(name_parts)
-        if ratio >= 0.5:
-            return to_python({"matched": True, "ocr_score": int(60 + ratio * 25),
-                              "method": "partial_name_parts",
-                              "detail": f"{matched_parts}/{len(name_parts)} name parts found"})
+        matched_parts = [p for p in name_parts if p in clean_text]
+        ratio = len(matched_parts) / len(name_parts)
+        if ratio >= 0.6:  # 60% of name parts found
+            score = int(55 + ratio * 30)
+            return to_python({"matched": True, "ocr_score": score,
+                              "method": "name_parts_match",
+                              "detail": f"{len(matched_parts)}/{len(name_parts)} name parts found in document"})
+        if ratio >= 0.4:  # At least 40% found — weak match
+            return to_python({"matched": False, "ocr_score": 45,
+                              "method": "weak_name_parts",
+                              "detail": f"Only {len(matched_parts)}/{len(name_parts)} name parts found"})
+
+    # Method 4: Any single significant name part (>=5 chars) found
+    long_parts = [p for p in name_parts if len(p) >= 5]
+    if long_parts and any(p in clean_text for p in long_parts):
+        found = [p for p in long_parts if p in clean_text]
+        return to_python({"matched": False, "ocr_score": 50,
+                          "method": "partial_name_found",
+                          "detail": f"Partial name match: {found[0]} found in document"})
 
     return to_python({
         "matched":   False,
         "ocr_score": 40,
         "method":    "no_match",
-        "detail":    f"Name '{expected_name}' not found in document",
+        "detail":    f"Name '{expected_name}' not found in document — check spelling or ID quality",
     })
 
 

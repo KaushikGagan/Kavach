@@ -10,7 +10,8 @@ import DemoPanel from '../components/DemoPanel';
 import KavachLogoAnimated from '../components/KavachLogoAnimated';
 import { getChallenge, verifyKYC } from '../api';
 
-const RECORD_SECONDS = 30;
+const RECORD_SECONDS = 45;
+const GESTURE_DURATION = 10; // seconds per gesture
 
 function getSupportedMimeType() {
   const types = ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4', ''];
@@ -24,6 +25,8 @@ export default function KYCPage() {
   const [challenge, setChallenge] = useState(null);   // { nonce, challenge, challenges }
   const [recording, setRecording] = useState(false);
   const [timeLeft, setTimeLeft]   = useState(RECORD_SECONDS);
+  const [currentGestureIdx, setCurrentGestureIdx] = useState(0);
+  const [completedGestures, setCompletedGestures] = useState([]);
   const [result, setResult]       = useState(null);
   const [error, setError]         = useState(null);
 
@@ -93,9 +96,31 @@ export default function KYCPage() {
     mr.start(100);
     mediaRecorderRef.current = mr;
     setRecording(true);
+    setCurrentGestureIdx(0);
+    setCompletedGestures([]);
     setTimeLeft(RECORD_SECONDS);
+
+    const challenges = challengeRef.current?.challenges || [];
     let t = RECORD_SECONDS;
-    timerRef.current = setInterval(() => { t -= 1; setTimeLeft(t); if (t <= 0) stopRecording(); }, 1000);
+    let gestureIdx = 0;
+
+    timerRef.current = setInterval(() => {
+      t -= 1;
+      setTimeLeft(t);
+
+      // Advance gesture every GESTURE_DURATION seconds
+      const newIdx = Math.min(
+        Math.floor((RECORD_SECONDS - t) / GESTURE_DURATION),
+        challenges.length - 1
+      );
+      if (newIdx !== gestureIdx && newIdx < challenges.length) {
+        gestureIdx = newIdx;
+        setCurrentGestureIdx(newIdx);
+        setCompletedGestures(prev => [...prev, challenges[newIdx - 1]].filter(Boolean));
+      }
+
+      if (t <= 0) stopRecording();
+    }, 1000);
   }
 
   function stopRecording() {
@@ -123,6 +148,7 @@ export default function KYCPage() {
     clearInterval(timerRef.current);
     setStep(0); setIdImage(null); setChallenge(null); setUserName('');
     setRecording(false); setTimeLeft(RECORD_SECONDS);
+    setCurrentGestureIdx(0); setCompletedGestures([]);
     setResult(null); setError(null);
   }
 
@@ -261,8 +287,10 @@ export default function KYCPage() {
                     <div className="video-corner bl" /><div className="video-corner br" />
                     {challenge && (
                       <ChallengeOverlay
-                        challenge={challenge.challenge}
+                        challenge={(challenge.challenges || [challenge.challenge])[currentGestureIdx] || challenge.challenge}
                         challenges={challenge.challenges}
+                        completedGestures={completedGestures}
+                        currentIdx={currentGestureIdx}
                         timeLeft={recording ? timeLeft : null}
                         isRecording={recording}
                       />

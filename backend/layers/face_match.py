@@ -42,17 +42,22 @@ def _detect_face(img: np.ndarray) -> Optional[np.ndarray]:
     """Detect and crop largest face. Returns grayscale face ROI."""
     gray = cv2.equalizeHist(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
     best, best_area = None, 0
-    for cas in [_HAAR, _HAAR2]:
-        faces = cas.detectMultiScale(gray, 1.05, 3, minSize=(40, 40))
-        if len(faces) > 0:
-            for (x, y, w, h) in faces:
-                if w * h > best_area:
-                    best_area = w * h
-                    best = (x, y, w, h)
+    # Try multiple scale factors for better detection
+    for scale in [1.05, 1.1, 1.15]:
+        for cas in [_HAAR, _HAAR2]:
+            faces = cas.detectMultiScale(gray, scale, 3, minSize=(30, 30))
+            if len(faces) > 0:
+                for (x, y, w, h) in faces:
+                    if w * h > best_area:
+                        best_area = w * h
+                        best = (x, y, w, h)
+        if best is not None:
+            break
     if best is None:
         return None
     x, y, w, h = best
-    pad = int(0.2 * min(w, h))
+    # Tighter crop — just the face, less background noise
+    pad = int(0.1 * min(w, h))
     roi = gray[max(0,y-pad):min(gray.shape[0],y+h+pad),
                max(0,x-pad):min(gray.shape[1],x+w+pad)]
     if roi.size == 0:

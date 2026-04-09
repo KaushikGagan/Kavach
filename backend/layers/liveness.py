@@ -44,10 +44,10 @@ def generate_challenge() -> dict:
     _nonce_store[nonce] = {
         "challenge":  challenges[0],
         "challenges": challenges,
-        "expires_at": time.time() + 45,
+        "expires_at": time.time() + 60,  # 60s for 3 gestures at 45s recording
     }
     return {"nonce": nonce, "challenge": challenges[0],
-            "challenges": challenges, "expires_in": 45}
+            "challenges": challenges, "expires_in": 60}
 
 
 def validate_nonce(nonce: str) -> Tuple[bool, str]:
