@@ -147,9 +147,12 @@ export default function VerdictBanner({ result }) {
 
       {/* Metrics */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        <MetricCard label="Risk Score"    value={result?.risk_score ?? '--'}     unit="/100" color={cfg.color} />
-        <MetricCard label="Confidence"    value={result?.confidence ?? '--'}     unit="%"    color={cfg.color} />
-        <MetricCard label="Trust Score"   value={result?.weighted_score ?? '--'} unit="/100" color={cfg.color} />
+        <MetricCard label="Risk Score"  value={result?.risk_score ?? '--'}     unit="/100" color={cfg.color} />
+        <MetricCard label="Confidence"  value={result?.confidence ?? '--'}     unit="%"    color={cfg.color} />
+        <MetricCard label="Trust Score" value={result?.weighted_score ?? '--'} unit="/100" color={cfg.color} />
+        {result?.layers?.liveness?.spoof_risk !== undefined && (
+          <MetricCard label="Spoof Risk" value={result.layers.liveness.spoof_risk} unit="%" color={result.layers.liveness.spoof_risk > 60 ? '#f43f5e' : result.layers.liveness.spoof_risk > 30 ? '#f59e0b' : '#00f5a0'} />
+        )}
       </div>
 
       {/* Reason panel */}

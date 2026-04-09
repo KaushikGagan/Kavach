@@ -26,7 +26,20 @@ def compute_risk_score(
     behavior: dict,
 ) -> dict:
 
-    # ── Hard gates (bypass weighted scoring) ──────────────────────────────
+    # ── HARD GATE: Photo spoof — face match alone cannot pass ─────────────
+    # This fixes the critical vulnerability where same photo = 100% trust
+    if liveness.get("status") == "FAIL":
+        spoof_risk = liveness.get("spoof_risk", 50)
+        if spoof_risk >= 80:
+            return _build_verdict(
+                verdict="FRAUD", risk_score=95, confidence=95,
+                face_match=face_match, liveness=liveness,
+                deepfake=deepfake, behavior=behavior,
+                reason=f"HARD BLOCK: {liveness.get('detail', 'Liveness failed')} — face match alone is insufficient",
+                action="Block — photo/replay spoof detected",
+            )
+
+    # ── HARD GATE: Nonce invalid ───────────────────────────────────────────
     if liveness.get("status") == "FAIL" and "nonce" in liveness.get("detail", "").lower():
         return _build_verdict(
             verdict="FRAUD",

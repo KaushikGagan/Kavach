@@ -91,10 +91,12 @@ async def demo_scenario(scenario: str):
     scenarios = {
         "real_user": {
             "face_match": {"score": 91, "status": "PASS", "similarity": 91.2, "detail": "ArcFace similarity 91.2% — identity confirmed"},
-            "liveness":   {"score": 95, "status": "PASS", "detail": "Liveness score 95/100 — PASS", "signals": {
-                "rppg":   {"score": 88, "is_real": True,  "bpm": 72.0, "snr": 0.73, "detail": "rPPG BPM=72, SNR=0.730 — pulse detected"},
-                "glare":  {"glare_ratio": 0.008, "is_screen": False, "detail": "Glare ratio 0.80% — normal"},
-                "replay": {"duplicate_ratio": 0.04, "is_replay": False, "detail": "Frame duplicate ratio 4.0% — normal"},
+            "liveness":   {"score": 95, "status": "PASS", "spoof_risk": 5, "detail": "Liveness 95/100 — PASS", "signals": {
+                "motion":  {"motion_score": 2.8,  "is_static": False, "spoof_risk": 5,  "detail": "Motion=2.800 — natural movement"},
+                "texture": {"texture_score": 12.4, "is_flat": False,  "detail": "Texture 12.4 — natural skin texture"},
+                "rppg":    {"score": 88, "is_real": True, "bpm": 72.0, "snr": 0.73, "detail": "rPPG BPM=72 — pulse detected"},
+                "glare":   {"glare_ratio": 0.008, "is_screen": False, "detail": "Glare 0.80% — normal"},
+                "replay":  {"duplicate_ratio": 0.04, "is_replay": False, "detail": "Duplicate ratio 4% — normal"},
             }},
             "deepfake":   {"score": 94, "status": "PASS", "flags_triggered": 0, "deepfake_probability": 6, "detail": "0/4 deepfake signals triggered — PASS", "signals": {
                 "frequency":       {"hf_ratio": 0.41, "is_deepfake": False, "confidence": 41, "detail": "FFT HF ratio 0.410 — frequency normal"},
@@ -111,10 +113,12 @@ async def demo_scenario(scenario: str):
         },
         "photo_spoof": {
             "face_match": {"score": 78, "status": "PASS", "similarity": 78.4, "detail": "ArcFace similarity 78.4% — identity confirmed"},
-            "liveness":   {"score": 10, "status": "FAIL", "detail": "Liveness score 10/100 — FAIL", "signals": {
-                "rppg":   {"score": 5,  "is_real": False, "bpm": 0.0,  "snr": 0.02, "detail": "rPPG BPM=0, SNR=0.020 — no pulse — possible screen/photo"},
-                "glare":  {"glare_ratio": 0.071, "is_screen": True,  "detail": "Glare ratio 7.10% — screen detected"},
-                "replay": {"duplicate_ratio": 0.89, "is_replay": True,  "detail": "Frame duplicate ratio 89.0% — REPLAY DETECTED"},
+            "liveness":   {"score": 0, "status": "FAIL", "spoof_risk": 95, "detail": "PHOTO SPOOF DETECTED — static image with flat texture", "signals": {
+                "motion":  {"motion_score": 0.11, "is_static": True,  "spoof_risk": 95, "detail": "Motion=0.110 — STATIC IMAGE DETECTED"},
+                "texture": {"texture_score": 3.1,  "is_flat": True,   "detail": "Texture 3.1 — FLAT TEXTURE (photo/screen)"},
+                "rppg":    {"score": 5,  "is_real": False, "bpm": 0.0, "snr": 0.02, "detail": "rPPG BPM=0 — no pulse"},
+                "glare":   {"glare_ratio": 0.071, "is_screen": True,  "detail": "Glare 7.10% — screen detected"},
+                "replay":  {"duplicate_ratio": 0.12, "is_replay": False, "detail": "Duplicate ratio 12% — normal"},
             }},
             "deepfake":   {"score": 70, "status": "PASS", "flags_triggered": 1, "deepfake_probability": 30, "detail": "1/4 deepfake signals triggered — PASS", "signals": {
                 "frequency":       {"hf_ratio": 0.45, "is_deepfake": False, "confidence": 45, "detail": "FFT HF ratio 0.450 — frequency normal"},
@@ -131,7 +135,7 @@ async def demo_scenario(scenario: str):
         },
         "video_replay": {
             "face_match": {"score": 82, "status": "PASS", "similarity": 82.1, "detail": "ArcFace similarity 82.1% — identity confirmed"},
-            "liveness":   {"score": 0,  "status": "FAIL", "detail": "Session nonce invalid — replay attack blocked", "signals": {}},
+            "liveness":   {"score": 0, "status": "FAIL", "spoof_risk": 98, "detail": "Session nonce invalid — replay attack blocked", "signals": {}},
             "deepfake":   {"score": 65, "status": "WARN", "flags_triggered": 2, "deepfake_probability": 35, "detail": "2/4 deepfake signals triggered — WARN", "signals": {
                 "frequency":       {"hf_ratio": 0.52, "is_deepfake": False, "confidence": 52, "detail": "FFT HF ratio 0.520 — frequency normal"},
                 "landmark_jitter": {"jitter_score": 0.31, "is_deepfake": False, "confidence": 6,  "detail": "Landmark jitter 0.31px/f² — smooth"},
@@ -147,10 +151,12 @@ async def demo_scenario(scenario: str):
         },
         "deepfake": {
             "face_match": {"score": 74, "status": "PASS", "similarity": 74.3, "detail": "ArcFace similarity 74.3% — identity confirmed"},
-            "liveness":   {"score": 40, "status": "WARN", "detail": "Liveness score 40/100 — WARN", "signals": {
-                "rppg":   {"score": 30, "is_real": False, "bpm": 38.0, "snr": 0.09, "detail": "rPPG BPM=38, SNR=0.090 — no pulse"},
-                "glare":  {"glare_ratio": 0.021, "is_screen": False, "detail": "Glare ratio 2.10% — normal"},
-                "replay": {"duplicate_ratio": 0.12, "is_replay": False, "detail": "Frame duplicate ratio 12.0% — normal"},
+            "liveness":   {"score": 40, "status": "WARN", "spoof_risk": 45, "detail": "Liveness 40/100 — WARN", "signals": {
+                "motion":  {"motion_score": 1.2,  "is_static": False, "spoof_risk": 40, "detail": "Motion=1.200 — low movement"},
+                "texture": {"texture_score": 7.1,  "is_flat": False,  "detail": "Texture 7.1 — borderline"},
+                "rppg":    {"score": 30, "is_real": False, "bpm": 38.0, "snr": 0.09, "detail": "rPPG BPM=38 — no pulse"},
+                "glare":   {"glare_ratio": 0.021, "is_screen": False, "detail": "Glare 2.10% — normal"},
+                "replay":  {"duplicate_ratio": 0.12, "is_replay": False, "detail": "Duplicate ratio 12% — normal"},
             }},
             "deepfake":   {"score": 18, "status": "FAIL", "flags_triggered": 3, "deepfake_probability": 82, "detail": "3/4 deepfake signals triggered — FAIL", "signals": {
                 "frequency":       {"hf_ratio": 0.81, "is_deepfake": True,  "confidence": 81, "detail": "FFT HF ratio 0.810 — GAN artifacts detected"},

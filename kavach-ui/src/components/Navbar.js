@@ -2,8 +2,10 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Cpu } from 'lucide-react';
 import KavachSymbol from './KavachSymbol';
+import { useTheme } from '../App';
 
 export default function Navbar() {
+  const { dark, toggle } = useTheme();
   return (
     <motion.nav
       initial={{ y: -70, opacity: 0 }}
@@ -53,7 +55,7 @@ export default function Navbar() {
         </span>
       </div>
 
-      {/* Right — status */}
+      {/* Right — status + theme toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 7,
@@ -69,16 +71,23 @@ export default function Navbar() {
             />
             <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#00f5a0' }} />
           </div>
-          <span style={{ fontSize: '0.68rem', color: '#00f5a0', fontWeight: 600, letterSpacing: '0.06em' }}>
-            ONLINE
-          </span>
+          <span style={{ fontSize: '0.68rem', color: '#00f5a0', fontWeight: 600, letterSpacing: '0.06em' }}>ONLINE</span>
         </div>
+
+        {/* Theme toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>{dark ? '🌙' : '☀️'}</span>
+          <button className={`theme-toggle ${dark ? '' : 'light'}`} onClick={toggle}>
+            <div className="theme-toggle-knob" />
+          </button>
+        </div>
+
         <div style={{
           background: 'rgba(255,255,255,0.04)',
           border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: 7, padding: '4px 10px',
         }}>
-          <span style={{ fontSize: '0.63rem', color: 'rgba(241,245,255,0.3)', fontWeight: 500 }}>v2.0</span>
+          <span style={{ fontSize: '0.63rem', color: 'var(--text-3)', fontWeight: 500 }}>v2.0</span>
         </div>
       </div>
     </motion.nav>
