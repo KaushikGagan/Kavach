@@ -16,6 +16,7 @@ from layers.face_match import match_faces
 from layers.deepfake import analyze_deepfake
 from layers.behavior import analyze_behavior
 from layers.risk_engine import compute_risk_score
+from services.ocr import verify_document
 
 # Path to React production build
 UI_BUILD = Path(__file__).parent.parent / "kavach-ui" / "build"
@@ -61,6 +62,7 @@ async def verify_kyc(
     video: UploadFile = File(...),
     id_image: str = Form(...),
     nonce: str = Form(...),
+    user_name: Optional[str] = Form(default=""),
     device_id: Optional[str] = Form(None),
 ):
     _clean_sessions()
@@ -81,16 +83,22 @@ async def verify_kyc(
     ip = request.client.host if request.client else "unknown"
     ua = request.headers.get("user-agent", "")
 
+    # ── Run all 5 layers in order ─────────────────────────────────────────────────────
     liveness_result = analyze_liveness(frames, nonce_valid)
     face_result     = match_faces(id_image, frames)
+    ocr_result      = verify_document(id_image, user_name or "")
     deepfake_result = analyze_deepfake(frames)
     behavior_result = analyze_behavior(ip, ua, session_start, submission_time, device_id)
 
     verdict = compute_risk_score(face_result, liveness_result, deepfake_result, behavior_result)
 
     return {
-        "status": "completed",
+        "status":           "completed",
         "processing_time_ms": round((time.time() - submission_time) * 1000),
+        "ocr_match":        ocr_result["ocr_match"],
+        "ocr_score":        ocr_result["ocr_score"],
+        "ocr_extracted_name": ocr_result.get("extracted_name"),
+        "ocr_detail":       ocr_result["detail"],
         **verdict,
     }
 

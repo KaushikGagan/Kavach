@@ -20,6 +20,7 @@ function getSupportedMimeType() {
 export default function KYCPage() {
   const [step, setStep]           = useState(0);
   const [idImage, setIdImage]     = useState(null);
+  const [userName, setUserName]   = useState('');
   const [challenge, setChallenge] = useState(null);   // { nonce, challenge, challenges }
   const [recording, setRecording] = useState(false);
   const [timeLeft, setTimeLeft]   = useState(RECORD_SECONDS);
@@ -107,7 +108,7 @@ export default function KYCPage() {
     setError(null);
     try {
       const deviceId = btoa(navigator.userAgent).slice(0, 16);
-      const res = await verifyKYC({ videoBlob: blob, idImageB64: idImg?.b64 || '', nonce: ch?.nonce || '', deviceId });
+      const res = await verifyKYC({ videoBlob: blob, idImageB64: idImg?.b64 || '', nonce: ch?.nonce || '', deviceId, userName });
       setResult(res);
       setStep(3);
     } catch {
@@ -120,7 +121,7 @@ export default function KYCPage() {
   function reset() {
     stopCamera();
     clearInterval(timerRef.current);
-    setStep(0); setIdImage(null); setChallenge(null);
+    setStep(0); setIdImage(null); setChallenge(null); setUserName('');
     setRecording(false); setTimeLeft(RECORD_SECONDS);
     setResult(null); setError(null);
   }
@@ -208,6 +209,25 @@ export default function KYCPage() {
                           <CheckCircle size={14} color="#00f5a0" />
                           <span style={{ fontSize: '0.75rem', color: '#00f5a0', fontWeight: 600 }}>ID Uploaded</span>
                         </div>
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={{ fontSize: '0.78rem', color: 'rgba(241,245,255,0.6)', display: 'block', marginBottom: 6 }}>
+                          Your Full Name (as on ID)
+                        </label>
+                        <input
+                          type="text"
+                          value={userName}
+                          onChange={e => setUserName(e.target.value)}
+                          placeholder="e.g. Rahul Sharma"
+                          style={{
+                            width: '100%', padding: '10px 14px',
+                            background: 'rgba(255,255,255,0.06)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            borderRadius: 10, color: '#f1f5ff',
+                            fontSize: '0.9rem', outline: 'none',
+                            fontFamily: 'Inter, sans-serif',
+                          }}
+                        />
                       </div>
                       <button className="btn-primary" style={{ width: '100%' }} onClick={proceedToLiveness}>
                         Continue to Liveness Check →
@@ -309,6 +329,41 @@ export default function KYCPage() {
               {step === 3 && result && (
                 <motion.div key="step3" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                   <VerdictBanner result={result} />
+
+                  {/* OCR Result Card */}
+                  {result.ocr_score !== undefined && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                      style={{
+                        marginTop: 16,
+                        background: result.ocr_match ? 'rgba(0,245,160,0.07)' : 'rgba(245,158,11,0.07)',
+                        border: `1px solid ${result.ocr_match ? 'rgba(0,245,160,0.25)' : 'rgba(245,158,11,0.25)'}`,
+                        borderRadius: 14, padding: '14px 18px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                        <span style={{ fontSize: '1rem' }}>{result.ocr_match ? '📝' : '⚠️'}</span>
+                        <span style={{ fontWeight: 700, fontSize: '0.88rem',
+                          color: result.ocr_match ? '#00f5a0' : '#f59e0b' }}>
+                          Document OCR {result.ocr_match ? 'Verified' : 'Unverified'}
+                        </span>
+                        <span style={{ marginLeft: 'auto', fontSize: '0.75rem', fontWeight: 700,
+                          color: result.ocr_match ? '#00f5a0' : '#f59e0b' }}>
+                          {result.ocr_score}/100
+                        </span>
+                      </div>
+                      {result.ocr_extracted_name && (
+                        <p style={{ fontSize: '0.75rem', color: 'rgba(241,245,255,0.55)', marginBottom: 4 }}>
+                          Extracted name: <span style={{ color: '#f1f5ff', fontWeight: 600 }}>{result.ocr_extracted_name}</span>
+                        </p>
+                      )}
+                      <p style={{ fontSize: '0.72rem', color: 'rgba(241,245,255,0.4)' }}>
+                        {result.ocr_detail}
+                      </p>
+                    </motion.div>
+                  )}
                   <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {result.layers && Object.entries(result.layers).map(([key, data], i) => (
                       <LayerCard key={key} layerKey={key} data={data} delay={i * 0.1} />

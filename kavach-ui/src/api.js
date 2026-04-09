@@ -7,12 +7,13 @@ export async function getChallenge() {
   return res.json();
 }
 
-export async function verifyKYC({ videoBlob, idImageB64, nonce, deviceId }) {
+export async function verifyKYC({ videoBlob, idImageB64, nonce, deviceId, userName }) {
   const form = new FormData();
   form.append('video', videoBlob, 'recording.webm');
   form.append('id_image', idImageB64);
   form.append('nonce', nonce);
-  if (deviceId) form.append('device_id', deviceId);
+  if (deviceId)  form.append('device_id', deviceId);
+  if (userName)  form.append('user_name', userName);
 
   const res = await fetch(`${BASE}/verify`, { method: 'POST', body: form });
   if (!res.ok) throw new Error('Verification failed');
