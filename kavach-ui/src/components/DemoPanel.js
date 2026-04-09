@@ -82,7 +82,7 @@ const MOCK_RESULTS = {
     reason: 'All checks passed — identity verified',
     layers: {
       face_match: { score: 91, status: 'PASS', detail: 'ArcFace similarity 91.2%', weight: '30%' },
-      liveness:   { score: 95, status: 'PASS', detail: 'Liveness score 95/100', weight: '30%', signals: { rppg: { detail: 'BPM=72, pulse detected' }, glare: { detail: 'Glare 0.8% — normal' }, replay: { detail: 'Duplicate ratio 4% — normal' } } },
+      liveness:   { score: 95, status: 'PASS', spoof_risk: 5, detail: 'Liveness 95/100 — PASS', weight: '30%', signals: { motion: { detail: 'Motion=2.800 — movement OK' }, texture: { detail: 'Texture=8.4 — natural skin' }, head: { detail: 'Head movement=32px — head turn detected' }, blinks: { detail: 'Blinks=2, eyes detected' }, rppg: { detail: 'BPM=72, pulse detected' }, glare: { detail: 'Glare 0.8% — normal' }, replay: { detail: 'Duplicate=4% — normal' } } },
       deepfake:   { score: 94, status: 'PASS', detail: '0/4 signals triggered', weight: '25%', signals: { frequency: { detail: 'HF ratio 0.41 — normal' }, landmark_jitter: { detail: 'Jitter 0.82px — smooth' }, optical_flow: { detail: 'Flow 1.23 — natural' }, facial_warping: { detail: 'Edge 0.06 — clean' } } },
       behavior:   { score: 92, status: 'PASS', detail: 'Behavioral score 92/100', weight: '15%', signals: { speed: { detail: '12.3s — normal' }, user_agent: { detail: 'Real browser' }, ip: { detail: 'Public IP' } } },
     },

@@ -10,7 +10,7 @@ import DemoPanel from '../components/DemoPanel';
 import KavachLogoAnimated from '../components/KavachLogoAnimated';
 import { getChallenge, verifyKYC } from '../api';
 
-const RECORD_SECONDS = 15;
+const RECORD_SECONDS = 30;
 
 function getSupportedMimeType() {
   const types = ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4', ''];
@@ -242,6 +242,7 @@ export default function KYCPage() {
                     {challenge && (
                       <ChallengeOverlay
                         challenge={challenge.challenge}
+                        challenges={challenge.challenges}
                         timeLeft={recording ? timeLeft : null}
                         isRecording={recording}
                       />

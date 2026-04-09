@@ -12,19 +12,17 @@ const CHALLENGES = {
   smile:              { emoji: '◡',   text: 'Smile Naturally',   hint: 'Give a relaxed, natural smile' },
 };
 
-export default function ChallengeOverlay({ challenge, timeLeft, isRecording }) {
-  const info = CHALLENGES[challenge] || { emoji: '◎', text: challenge, hint: 'Follow the instruction' };
-  const urgent = timeLeft !== null && timeLeft <= 5;
+export default function ChallengeOverlay({ challenge, challenges, timeLeft, isRecording }) {
+  const info   = CHALLENGES[challenge] || { emoji: '◎', text: challenge, hint: 'Follow the instruction' };
+  const urgent = timeLeft !== null && timeLeft <= 8;
+  const allChallenges = challenges || [challenge];
 
   return (
     <>
-      {/* Face bounding box with glowing corners */}
+      {/* Face bounding box */}
       <div className="face-box">
-        <div className="face-corner tl" />
-        <div className="face-corner tr" />
-        <div className="face-corner bl" />
-        <div className="face-corner br" />
-        {/* Center crosshair dot */}
+        <div className="face-corner tl" /><div className="face-corner tr" />
+        <div className="face-corner bl" /><div className="face-corner br" />
         <motion.div
           animate={{ opacity: [0.4, 1, 0.4], scale: [1, 1.3, 1] }}
           transition={{ duration: 2, repeat: Infinity }}
@@ -42,21 +40,20 @@ export default function ChallengeOverlay({ challenge, timeLeft, isRecording }) {
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         background: 'linear-gradient(to top, rgba(3,5,15,0.97) 0%, rgba(3,5,15,0.75) 60%, transparent 100%)',
-        padding: '24px 16px 18px',
+        padding: '20px 14px 16px',
         borderRadius: '0 0 calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px)',
         zIndex: 4,
       }}>
+
         {/* Recording row */}
         {isRecording && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <motion.div
               animate={{ opacity: [1, 0.15, 1] }}
               transition={{ duration: 0.9, repeat: Infinity }}
               style={{ width: 7, height: 7, borderRadius: '50%', background: '#f43f5e', flexShrink: 0 }}
             />
-            <span style={{ fontSize: '0.65rem', color: '#f43f5e', fontWeight: 700, letterSpacing: '0.14em' }}>
-              REC
-            </span>
+            <span style={{ fontSize: '0.65rem', color: '#f43f5e', fontWeight: 700, letterSpacing: '0.14em' }}>REC</span>
             <div style={{ flex: 1 }} />
             {timeLeft !== null && (
               <motion.span
@@ -65,7 +62,6 @@ export default function ChallengeOverlay({ challenge, timeLeft, isRecording }) {
                 style={{
                   fontSize: '0.82rem', fontWeight: 800,
                   color: urgent ? '#f43f5e' : '#f1f5ff',
-                  fontVariantNumeric: 'tabular-nums',
                   fontFamily: "'Space Grotesk', sans-serif",
                 }}
               >
@@ -75,33 +71,56 @@ export default function ChallengeOverlay({ challenge, timeLeft, isRecording }) {
           </div>
         )}
 
-        {/* Challenge instruction card */}
+        {/* All 3 challenges mini-list */}
+        {allChallenges.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            {allChallenges.map((c, i) => {
+              const ci = CHALLENGES[c] || { emoji: '◎', text: c };
+              const isCurrent = c === challenge;
+              return (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: isCurrent ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${isCurrent ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                  borderRadius: 8, padding: '4px 8px',
+                  transition: 'all 0.3s',
+                }}>
+                  <span style={{ fontSize: '0.75rem' }}>{ci.emoji}</span>
+                  <span style={{
+                    fontSize: '0.65rem', fontWeight: isCurrent ? 700 : 400,
+                    color: isCurrent ? '#c4b5fd' : 'rgba(241,245,255,0.4)',
+                  }}>
+                    {i + 1}. {ci.text}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Current challenge card */}
         <motion.div
           key={challenge}
-          initial={{ opacity: 0, y: 12, scale: 0.97 }}
+          initial={{ opacity: 0, y: 10, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
           style={{
             background: 'rgba(139,92,246,0.15)',
             border: '1px solid rgba(139,92,246,0.35)',
-            borderRadius: 14,
-            padding: '11px 16px',
-            display: 'flex', alignItems: 'center', gap: 14,
+            borderRadius: 14, padding: '10px 14px',
+            display: 'flex', alignItems: 'center', gap: 12,
             backdropFilter: 'blur(16px)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08)',
           }}
         >
           <motion.div
             animate={{ scale: [1, 1.12, 1] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            transition={{ duration: 1.8, repeat: Infinity }}
             style={{
-              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
               background: 'rgba(139,92,246,0.2)',
               border: '1px solid rgba(139,92,246,0.4)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1.1rem', color: '#c4b5fd',
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontWeight: 700,
+              fontSize: '1.1rem', color: '#c4b5fd', fontWeight: 700,
             }}
           >
             {info.emoji}
@@ -114,7 +133,6 @@ export default function ChallengeOverlay({ challenge, timeLeft, isRecording }) {
               {info.hint}
             </div>
           </div>
-          {/* AI indicator */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
             {[0,1,2].map(i => (
               <motion.div key={i}
@@ -127,17 +145,14 @@ export default function ChallengeOverlay({ challenge, timeLeft, isRecording }) {
         </motion.div>
       </div>
 
-      {/* Top overlay — AI scanning label */}
+      {/* Top AI scanning label */}
       <div style={{
         position: 'absolute', top: 14, left: 0, right: 0,
-        display: 'flex', justifyContent: 'center',
-        zIndex: 4, pointerEvents: 'none',
+        display: 'flex', justifyContent: 'center', zIndex: 4, pointerEvents: 'none',
       }}>
         <div style={{
-          background: 'rgba(3,5,15,0.7)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 999, padding: '4px 14px',
-          backdropFilter: 'blur(12px)',
+          background: 'rgba(3,5,15,0.7)', border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: 999, padding: '4px 14px', backdropFilter: 'blur(12px)',
           display: 'flex', alignItems: 'center', gap: 7,
         }}>
           <motion.div
@@ -146,7 +161,7 @@ export default function ChallengeOverlay({ challenge, timeLeft, isRecording }) {
             style={{ width: 5, height: 5, borderRadius: '50%', background: '#67e8f9' }}
           />
           <span style={{ fontSize: '0.63rem', color: '#67e8f9', fontWeight: 600, letterSpacing: '0.1em' }}>
-            AI SCANNING
+            AI SCANNING — COMPLETE ALL GESTURES
           </span>
         </div>
       </div>
