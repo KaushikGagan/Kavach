@@ -20,7 +20,7 @@ function getSupportedMimeType() {
 export default function KYCPage() {
   const [step, setStep]           = useState(0);
   const [idImage, setIdImage]     = useState(null);
-  const [challenge, setChallenge] = useState(null);
+  const [challenge, setChallenge] = useState(null);   // { nonce, challenge, challenges }
   const [recording, setRecording] = useState(false);
   const [timeLeft, setTimeLeft]   = useState(RECORD_SECONDS);
   const [result, setResult]       = useState(null);
@@ -252,6 +252,32 @@ export default function KYCPage() {
                     <span className="badge badge-info">🔐 Nonce: {challenge?.nonce?.slice(0, 8)}…</span>
                     <span className="badge badge-info">⏱ Expires in {challenge?.expires_in}s</span>
                   </div>
+
+                  {/* Multi-gesture challenge list */}
+                  {challenge?.challenges && challenge.challenges.length > 1 && (
+                    <div style={{
+                      background: 'rgba(139,92,246,0.08)',
+                      border: '1px solid rgba(139,92,246,0.2)',
+                      borderRadius: 10, padding: '10px 14px', marginBottom: 14,
+                    }}>
+                      <p style={{ fontSize: '0.72rem', color: '#a78bfa', fontWeight: 700, marginBottom: 8, letterSpacing: '0.08em' }}>
+                        COMPLETE ALL 3 GESTURES IN ORDER:
+                      </p>
+                      {challenge.challenges.map((c, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{
+                            width: 20, height: 20, borderRadius: '50%',
+                            background: 'rgba(139,92,246,0.3)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.65rem', fontWeight: 700, color: '#c4b5fd', flexShrink: 0,
+                          }}>{i + 1}</span>
+                          <span style={{ fontSize: '0.78rem', color: 'rgba(241,245,255,0.8)', textTransform: 'capitalize' }}>
+                            {c.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {!recording ? (
                     <button className="btn-primary" style={{ width: '100%' }} onClick={startRecording}>

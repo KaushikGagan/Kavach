@@ -24,6 +24,14 @@ CHALLENGES = [
     "look_up", "show_three_fingers", "touch_nose", "smile",
 ]
 
+# Multi-gesture: 3 challenges per session from different categories
+CHALLENGE_CATEGORIES = {
+    "eye":        ["blink_twice"],
+    "head":       ["turn_left", "turn_right", "look_up"],
+    "expression": ["open_mouth", "smile"],
+    "gesture":    ["show_three_fingers", "touch_nose"],
+}
+
 _nonce_store: dict = {}
 
 # Bundled cascades
@@ -32,10 +40,23 @@ _FACE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_front
 
 
 def generate_challenge() -> dict:
-    nonce     = hashlib.sha256(f"{time.time()}{random.random()}".encode()).hexdigest()[:16]
-    challenge = random.choice(CHALLENGES)
-    _nonce_store[nonce] = {"challenge": challenge, "expires_at": time.time() + 30}
-    return {"nonce": nonce, "challenge": challenge, "expires_in": 30}
+    """Generate 3 sequential challenges from different categories."""
+    nonce = hashlib.sha256(f"{time.time()}{random.random()}".encode()).hexdigest()[:16]
+    # Pick one from each of 3 different categories
+    cats = random.sample(list(CHALLENGE_CATEGORIES.keys()), 3)
+    challenges = [random.choice(CHALLENGE_CATEGORIES[c]) for c in cats]
+    primary = challenges[0]  # shown first
+    _nonce_store[nonce] = {
+        "challenge":  primary,
+        "challenges": challenges,
+        "expires_at": time.time() + 45,  # 45s for 3 gestures
+    }
+    return {
+        "nonce":      nonce,
+        "challenge":  primary,
+        "challenges": challenges,
+        "expires_in": 45,
+    }
 
 
 def validate_nonce(nonce: str) -> Tuple[bool, str]:
@@ -129,6 +150,42 @@ def detect_texture_liveness(frames: List[np.ndarray]) -> dict:
         "texture_score": round(avg, 2),
         "is_flat":       is_flat,
         "detail": f"Texture={avg:.1f} — {'FLAT (photo/screen)' if is_flat else 'natural skin'}",
+    })
+
+
+# ── Signal 2.5: Head pose detection ───────────────────────────────────────
+def detect_head_movement(frames: List[np.ndarray]) -> dict:
+    """
+    Detect head turning using face bounding box position shift.
+    Real person turning head: face center moves horizontally.
+    Photo: face center stays fixed.
+    """
+    face_centers = []
+    for frame in frames[::3]:
+        gray  = cv2.equalizeHist(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+        faces = _FACE_CASCADE.detectMultiScale(gray, 1.1, 3, minSize=(60, 60))
+        if len(faces) > 0:
+            x, y, w, h = max(faces, key=lambda f: f[2]*f[3])
+            face_centers.append((float(x + w/2), float(y + h/2)))
+
+    if len(face_centers) < 5:
+        return to_python({"head_movement": 0.0, "turned": False,
+                          "detail": "Insufficient face detections for head pose"})
+
+    centers = np.array(face_centers)
+    # Horizontal range of face center = head turning
+    h_range = float(np.max(centers[:, 0]) - np.min(centers[:, 0]))
+    v_range = float(np.max(centers[:, 1]) - np.min(centers[:, 1]))
+    total_movement = float(np.sqrt(h_range**2 + v_range**2))
+
+    # Real head turn: face center moves > 15px horizontally
+    turned = h_range > 15.0
+
+    return to_python({
+        "head_movement": round(total_movement, 1),
+        "h_range":       round(h_range, 1),
+        "turned":        turned,
+        "detail": f"Head movement={total_movement:.0f}px h={h_range:.0f}px — {'head turn detected' if turned else 'no head movement'}",
     })
 
 
@@ -310,6 +367,7 @@ def analyze_liveness(frames: List[np.ndarray], nonce_valid: bool) -> dict:
     # Run all signals
     motion  = detect_micro_motion(frames)
     texture = detect_texture_liveness(frames)
+    head    = detect_head_movement(frames)
     blinks  = detect_blinks(frames)
     rppg    = detect_rppg_signal(frames)
     glare   = detect_screen_glare(frames)
@@ -320,7 +378,7 @@ def analyze_liveness(frames: List[np.ndarray], nonce_valid: bool) -> dict:
         return to_python({
             "score": 0, "status": "FAIL", "spoof_risk": 98,
             "detail": "VIDEO REPLAY DETECTED — duplicate frames",
-            "signals": {"motion": motion, "texture": texture, "blinks": blinks,
+            "signals": {"motion": motion, "texture": texture, "head": head, "blinks": blinks,
                         "rppg": rppg, "glare": glare, "replay": replay, "lighting": lighting},
         })
 
@@ -329,17 +387,18 @@ def analyze_liveness(frames: List[np.ndarray], nonce_valid: bool) -> dict:
         return to_python({
             "score": 0, "status": "FAIL", "spoof_risk": 92,
             "detail": "PHOTO SPOOF DETECTED — static image with flat texture",
-            "signals": {"motion": motion, "texture": texture, "blinks": blinks,
+            "signals": {"motion": motion, "texture": texture, "head": head, "blinks": blinks,
                         "rppg": rppg, "glare": glare, "replay": replay, "lighting": lighting},
         })
 
     # Weighted scoring
     score = 0
-    if not motion["is_static"]:                    score += 30  # strongest
+    if not motion["is_static"]:                    score += 25  # strongest
     if not texture["is_flat"]:                     score += 15
-    if blinks.get("blinks_detected", 0) >= 1:     score += 20  # at least 1 blink
+    if head.get("turned", False):                  score += 15  # head movement
+    if blinks.get("blinks_detected", 0) >= 1:     score += 15  # at least 1 blink
     if blinks.get("eye_detected", False):          score += 10
-    if rppg.get("is_real", False):                 score += 15
+    if rppg.get("is_real", False):                 score += 10
     if not glare.get("is_screen", False):          score += 5
     if not replay["is_replay"]:                    score += 5
 
@@ -348,7 +407,7 @@ def analyze_liveness(frames: List[np.ndarray], nonce_valid: bool) -> dict:
 
     return to_python({
         "score": score, "status": status, "spoof_risk": spoof_risk,
-        "signals": {"motion": motion, "texture": texture, "blinks": blinks,
+        "signals": {"motion": motion, "texture": texture, "head": head, "blinks": blinks,
                     "rppg": rppg, "glare": glare, "replay": replay, "lighting": lighting},
         "detail": f"Liveness {score}/100 — {status} (spoof risk: {spoof_risk}%)",
     })
