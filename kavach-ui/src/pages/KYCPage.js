@@ -111,7 +111,7 @@ export default function KYCPage() {
       setResult(res);
       setStep(3);
     } catch {
-      setError('Backend offline — showing demo result');
+      setError('⚠ Backend is not running. Start the server: cd backend && py -m uvicorn main:app --port 8000');
       setResult(OFFLINE_RESULT);
       setStep(3);
     }
@@ -359,13 +359,16 @@ export default function KYCPage() {
 }
 
 const OFFLINE_RESULT = {
-  verdict: 'SAFE', risk_score: 8, confidence: 94, weighted_score: 92,
-  action: 'Approve KYC',
-  reason: 'All checks passed — identity verified (offline demo)',
+  verdict: 'SUSPICIOUS',
+  risk_score: 50,
+  confidence: 40,
+  weighted_score: 50,
+  action: 'Backend offline — cannot verify. Start server to get real results.',
+  reason: 'Backend server is not running. Real analysis requires the FastAPI backend. Run: cd backend && py -m uvicorn main:app --port 8000',
   layers: {
-    face_match: { score: 91, status: 'PASS', detail: 'ArcFace similarity 91.2%', weight: '30%', signals: {} },
-    liveness:   { score: 95, status: 'PASS', detail: 'Liveness score 95/100', weight: '30%', signals: { rppg: { detail: 'BPM=72, pulse detected' }, glare: { detail: 'Glare 0.8% — normal' }, replay: { detail: 'Duplicate ratio 4% — normal' } } },
-    deepfake:   { score: 94, status: 'PASS', detail: '0/4 signals triggered', weight: '25%', signals: { frequency: { detail: 'HF ratio 0.41 — normal' }, landmark_jitter: { detail: 'Jitter 0.82px — smooth' }, optical_flow: { detail: 'Flow 1.23 — natural' }, facial_warping: { detail: 'Edge 0.06 — clean' } } },
-    behavior:   { score: 92, status: 'PASS', detail: 'Behavioral score 92/100', weight: '15%', signals: { speed: { detail: '12.3s — normal' }, user_agent: { detail: 'Real browser' }, ip: { detail: 'Public IP' } } },
+    face_match: { score: 0, status: 'WARN', detail: 'Backend offline — no analysis performed', weight: '30%', signals: {} },
+    liveness:   { score: 0, status: 'WARN', detail: 'Backend offline — no liveness check', weight: '30%', signals: {} },
+    deepfake:   { score: 0, status: 'WARN', detail: 'Backend offline — no deepfake analysis', weight: '25%', signals: {} },
+    behavior:   { score: 0, status: 'WARN', detail: 'Backend offline — no behavioral analysis', weight: '15%', signals: {} },
   },
 };

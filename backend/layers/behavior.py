@@ -8,6 +8,7 @@ Layer 4: Behavioral & Context Analysis
 import time
 import hashlib
 from typing import Optional
+from layers.utils import to_python
 
 
 def analyze_behavior(
@@ -105,9 +106,9 @@ def analyze_behavior(
     score = max(0, min(100, score))
     status = "PASS" if score >= 70 else ("WARN" if score >= 45 else "FAIL")
 
-    return {
+    return to_python({
         "score": score,
         "status": status,
         "signals": signals,
         "detail": f"Behavioral score {score}/100 — {status}",
-    }
+    })

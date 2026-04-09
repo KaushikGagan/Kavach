@@ -13,6 +13,7 @@ import hashlib
 import time
 import random
 from typing import List, Tuple
+from layers.utils import to_python
 
 CHALLENGES = [
     "blink_twice", "turn_left", "turn_right", "open_mouth",
@@ -64,7 +65,7 @@ def detect_micro_motion(frames: List[np.ndarray]) -> dict:
     This is the PRIMARY photo spoof detector.
     """
     if len(frames) < 10:
-        return {"motion_score": 0, "is_static": True, "detail": "Too few frames"}
+        return to_python({"motion_score": 0, "is_static": True, "spoof_risk": 100, "detail": "Too few frames"})
 
     diffs = []
     prev = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY).astype(np.float32)
@@ -83,13 +84,13 @@ def detect_micro_motion(frames: List[np.ndarray]) -> dict:
 
     spoof_risk = max(0, min(100, int((1.0 - min(mean_motion / 3.0, 1.0)) * 100)))
 
-    return {
+    return to_python({
         "motion_score": round(mean_motion, 3),
         "motion_variance": round(motion_variance, 4),
         "is_static": is_static,
         "spoof_risk": spoof_risk,
         "detail": f"Motion={mean_motion:.3f} var={motion_variance:.4f} — {'STATIC IMAGE DETECTED' if is_static else 'natural movement'}",
-    }
+    })
 
 
 def detect_texture_liveness(frames: List[np.ndarray]) -> dict:
@@ -115,16 +116,16 @@ def detect_texture_liveness(frames: List[np.ndarray]) -> dict:
     # Real skin: texture > 8. Printed photo: texture < 5. Screen: texture < 4.
     is_flat = avg_texture < 5.0
 
-    return {
+    return to_python({
         "texture_score": round(avg_texture, 2),
         "is_flat": is_flat,
         "detail": f"Texture score {avg_texture:.1f} — {'FLAT TEXTURE (photo/screen)' if is_flat else 'natural skin texture'}",
-    }
+    })
 
 
 def detect_rppg_signal(frames: List[np.ndarray]) -> dict:
     if len(frames) < 20:
-        return {"score": 0, "is_real": False, "bpm": 0.0, "snr": 0.0, "detail": "Too few frames for rPPG"}
+        return to_python({"score": 0, "is_real": False, "bpm": 0.0, "snr": 0.0, "detail": "Too few frames for rPPG"})
 
     green_means = []
     for frame in frames:
@@ -148,10 +149,10 @@ def detect_rppg_signal(frames: List[np.ndarray]) -> dict:
     is_real = snr > 0.15 and 45 <= bpm <= 180
     score = min(100, int(snr * 120)) if is_real else max(0, int(snr * 40))
 
-    return {
+    return to_python({
         "score": score, "is_real": is_real, "bpm": round(bpm, 1), "snr": round(snr, 3),
         "detail": f"rPPG BPM={bpm:.0f}, SNR={snr:.3f} — {'pulse detected' if is_real else 'no pulse — possible photo/screen'}",
-    }
+    })
 
 
 def detect_screen_glare(frames: List[np.ndarray]) -> dict:
@@ -162,15 +163,15 @@ def detect_screen_glare(frames: List[np.ndarray]) -> dict:
         glare_scores.append(np.sum(glare_mask) / glare_mask.size)
     avg_glare = float(np.mean(glare_scores)) if glare_scores else 0
     is_screen = avg_glare > 0.04
-    return {
+    return to_python({
         "glare_ratio": round(avg_glare, 4), "is_screen": is_screen,
         "detail": f"Glare {avg_glare:.2%} — {'screen detected' if is_screen else 'normal'}",
-    }
+    })
 
 
 def detect_frame_duplicates(frames: List[np.ndarray]) -> dict:
     if len(frames) < 10:
-        return {"is_replay": False, "duplicate_ratio": 0.0, "detail": "Insufficient frames"}
+        return to_python({"is_replay": False, "duplicate_ratio": 0.0, "detail": "Insufficient frames"})
 
     def phash(frame):
         small = cv2.resize(frame, (16, 16))
@@ -181,33 +182,33 @@ def detect_frame_duplicates(frames: List[np.ndarray]) -> dict:
     dups = sum(np.mean(hashes[i] == hashes[i-1]) > 0.97 for i in range(1, len(hashes)))
     dup_ratio = dups / max(len(hashes) - 1, 1)
     is_replay = dup_ratio > 0.5
-    return {
+    return to_python({
         "duplicate_ratio": round(dup_ratio, 3), "is_replay": is_replay,
         "detail": f"Duplicate ratio {dup_ratio:.1%} — {'REPLAY DETECTED' if is_replay else 'normal'}",
-    }
+    })
 
 
 def detect_low_light(frames: List[np.ndarray]) -> dict:
     vals = [float(np.mean(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY))) for f in frames[::5]]
     avg = float(np.mean(vals)) if vals else 0
-    return {
+    return to_python({
         "avg_brightness": round(avg, 1),
         "is_too_dark": avg < 30,
         "is_too_bright": avg > 230,
         "detail": f"Brightness {avg:.0f}/255 — {'TOO DARK' if avg < 30 else 'TOO BRIGHT' if avg > 230 else 'normal'}",
-    }
+    })
 
 
 def analyze_liveness(frames: List[np.ndarray], nonce_valid: bool) -> dict:
     if not nonce_valid:
-        return {"score": 0, "status": "FAIL", "spoof_risk": 100,
-                "detail": "Session nonce invalid — replay attack blocked", "signals": {}}
+        return to_python({"score": 0, "status": "FAIL", "spoof_risk": 100,
+                "detail": "Session nonce invalid — replay attack blocked", "signals": {}})
 
     lighting = detect_low_light(frames)
     if lighting["is_too_dark"] or lighting["is_too_bright"]:
-        return {"score": 5, "status": "FAIL", "spoof_risk": 80,
+        return to_python({"score": 5, "status": "FAIL", "spoof_risk": 80,
                 "detail": f"Lighting check failed: {lighting['detail']}",
-                "signals": {"lighting": lighting}}
+                "signals": {"lighting": lighting}})
 
     # Run all signals
     motion  = detect_micro_motion(frames)
@@ -219,21 +220,20 @@ def analyze_liveness(frames: List[np.ndarray], nonce_valid: bool) -> dict:
     # ── HARD GATE: Photo spoof detection ──────────────────────────────────
     # If BOTH motion is static AND texture is flat → definite photo attack
     if motion["is_static"] and texture["is_flat"]:
-        return {
+        return to_python({
             "score": 0, "status": "FAIL", "spoof_risk": 95,
             "detail": "PHOTO SPOOF DETECTED — static image with flat texture",
             "signals": {"motion": motion, "texture": texture, "rppg": rppg,
                         "glare": glare, "replay": replay, "lighting": lighting},
-        }
+        })
 
-    # ── HARD GATE: Replay attack ───────────────────────────────────────────
     if replay["is_replay"]:
-        return {
+        return to_python({
             "score": 0, "status": "FAIL", "spoof_risk": 98,
             "detail": "VIDEO REPLAY DETECTED — duplicate frames",
             "signals": {"motion": motion, "texture": texture, "rppg": rppg,
                         "glare": glare, "replay": replay, "lighting": lighting},
-        }
+        })
 
     # ── Weighted scoring ───────────────────────────────────────────────────
     score = 0
@@ -247,9 +247,9 @@ def analyze_liveness(frames: List[np.ndarray], nonce_valid: bool) -> dict:
     spoof_risk = max(0, 100 - score)
     status = "PASS" if score >= 70 else ("WARN" if score >= 45 else "FAIL")
 
-    return {
+    return to_python({
         "score": score, "status": status, "spoof_risk": spoof_risk,
         "signals": {"motion": motion, "texture": texture, "rppg": rppg,
                     "glare": glare, "replay": replay, "lighting": lighting},
         "detail": f"Liveness {score}/100 — {status} (spoof risk: {spoof_risk}%)",
-    }
+    })

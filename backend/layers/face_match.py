@@ -10,6 +10,7 @@ import base64
 import tempfile
 import os
 from typing import Optional
+from layers.utils import to_python
 
 
 def _save_temp_image(image_data: bytes, suffix: str = ".jpg") -> str:
@@ -47,7 +48,7 @@ def match_faces(id_image_b64: str, live_frames: list) -> dict:
 
     best_frame = extract_best_frame(live_frames)
     if best_frame is None:
-        return {"score": 0, "status": "FAIL", "detail": "No valid frame extracted from video"}
+        return to_python({"score": 0, "status": "FAIL", "detail": "No valid frame extracted from video"})
 
     live_path = _save_temp_image(cv2.imencode(".jpg", best_frame)[1].tobytes())
 
@@ -63,15 +64,15 @@ def match_faces(id_image_b64: str, live_frames: list) -> dict:
         verified = result["verified"]
         status = "PASS" if verified and similarity >= 70 else ("WARN" if similarity >= 55 else "FAIL")
 
-        return {
+        return to_python({
             "score": max(0, min(100, int(similarity))),
             "similarity": similarity,
             "status": status,
             "detail": f"ArcFace similarity {similarity:.1f}% — {'identity confirmed' if verified else 'identity mismatch'}",
             "threshold": 70,
-        }
+        })
     except Exception as e:
-        return {"score": 40, "status": "WARN", "detail": f"Face match error: {str(e)[:80]}"}
+        return to_python({"score": 40, "status": "WARN", "detail": f"Face match error: {str(e)[:80]}"})
     finally:
         for p in [id_path, live_path]:
             try:
@@ -91,7 +92,7 @@ def _fallback_face_match(id_image_b64: str, live_frames: list) -> dict:
 
     best_frame = extract_best_frame(live_frames)
     if id_img is None or best_frame is None:
-        return {"score": 0, "status": "FAIL", "detail": "Could not decode images"}
+        return to_python({"score": 0, "status": "FAIL", "detail": "Could not decode images"})
 
     def face_histogram(img):
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -103,10 +104,10 @@ def _fallback_face_match(id_image_b64: str, live_frames: list) -> dict:
     similarity = cv2.compareHist(h1, h2, cv2.HISTCMP_CORREL) * 100
 
     status = "PASS" if similarity >= 65 else ("WARN" if similarity >= 45 else "FAIL")
-    return {
+    return to_python({
         "score": max(0, int(similarity)),
         "similarity": round(similarity, 2),
         "status": status,
         "detail": f"Fallback histogram similarity {similarity:.1f}% (DeepFace unavailable)",
         "threshold": 65,
-    }
+    })

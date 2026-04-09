@@ -9,6 +9,7 @@ Layer 3: Hybrid Deepfake Detection
 import cv2
 import numpy as np
 from typing import List
+from layers.utils import to_python
 
 
 def analyze_frequency_artifacts(frames: List[np.ndarray]) -> dict:
@@ -41,12 +42,12 @@ def analyze_frequency_artifacts(frames: List[np.ndarray]) -> dict:
     is_deepfake = avg_ratio > 0.68
     confidence = min(100, int(avg_ratio * 100))
 
-    return {
+    return to_python({
         "hf_ratio": round(avg_ratio, 4),
         "is_deepfake": is_deepfake,
         "confidence": confidence,
         "detail": f"FFT HF ratio {avg_ratio:.3f} — {'GAN artifacts detected' if is_deepfake else 'frequency normal'}",
-    }
+    })
 
 
 def analyze_landmark_jitter(frames: List[np.ndarray]) -> dict:
@@ -64,7 +65,7 @@ def analyze_landmark_jitter(frames: List[np.ndarray]) -> dict:
             min_detection_confidence=0.5,
         )
     except ImportError:
-        return {"jitter_score": 0, "is_deepfake": False, "detail": "MediaPipe unavailable — skipped"}
+        return to_python({"jitter_score": 0, "is_deepfake": False, "confidence": 0, "detail": "MediaPipe unavailable — skipped"})
 
     # Key landmark indices: nose tip, left eye, right eye, left mouth, right mouth
     KEY_POINTS = [1, 33, 263, 61, 291]
@@ -83,8 +84,7 @@ def analyze_landmark_jitter(frames: List[np.ndarray]) -> dict:
     face_mesh.close()
 
     if not any(len(v) > 5 for v in trajectories.values()):
-        # FIX #4: always return is_deepfake key to prevent KeyError
-        return {"jitter_score": 0, "is_deepfake": False, "confidence": 0, "detail": "Insufficient landmark data"}
+        return to_python({"jitter_score": 0, "is_deepfake": False, "confidence": 0, "detail": "Insufficient landmark data"})
 
     jitter_values = []
     for pts in trajectories.values():
@@ -101,12 +101,12 @@ def analyze_landmark_jitter(frames: List[np.ndarray]) -> dict:
     is_deepfake = avg_jitter > 2.5
     score = min(100, int(avg_jitter * 20))
 
-    return {
+    return to_python({
         "jitter_score": round(avg_jitter, 3),
         "is_deepfake": is_deepfake,
         "confidence": score,
         "detail": f"Landmark jitter {avg_jitter:.2f}px/f² — {'unnatural movement detected' if is_deepfake else 'smooth natural motion'}",
-    }
+    })
 
 
 def analyze_optical_flow(frames: List[np.ndarray]) -> dict:
@@ -115,7 +115,7 @@ def analyze_optical_flow(frames: List[np.ndarray]) -> dict:
     Replayed/deepfake videos have mechanical or near-zero background flow.
     """
     if len(frames) < 10:
-        return {"flow_score": 0, "is_suspicious": False, "detail": "Too few frames"}
+        return to_python({"flow_score": 0, "is_suspicious": False, "detail": "Too few frames"})
 
     flow_magnitudes = []
     prev_gray = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
@@ -132,7 +132,7 @@ def analyze_optical_flow(frames: List[np.ndarray]) -> dict:
         prev_gray = curr_gray
 
     if not flow_magnitudes:
-        return {"flow_score": 0, "is_suspicious": False, "detail": "No flow computed"}
+        return to_python({"flow_score": 0, "is_suspicious": False, "detail": "No flow computed"})
 
     mean_flow = float(np.mean(flow_magnitudes))
     flow_variance = float(np.var(flow_magnitudes))
@@ -140,12 +140,12 @@ def analyze_optical_flow(frames: List[np.ndarray]) -> dict:
     # Replay: very low variance (static video). Deepfake: unnaturally uniform flow.
     is_suspicious = mean_flow < 0.3 or flow_variance < 0.01
 
-    return {
+    return to_python({
         "mean_flow": round(mean_flow, 4),
         "flow_variance": round(flow_variance, 4),
         "is_suspicious": is_suspicious,
         "detail": f"Optical flow mean={mean_flow:.3f} var={flow_variance:.4f} — {'suspicious (static/replay)' if is_suspicious else 'natural motion'}",
-    }
+    })
 
 
 def analyze_facial_warping(frames: List[np.ndarray]) -> dict:
@@ -166,11 +166,11 @@ def analyze_facial_warping(frames: List[np.ndarray]) -> dict:
     avg_warp = float(np.mean(warp_scores)) if warp_scores else 0
     is_warped = avg_warp > 0.12
 
-    return {
+    return to_python({
         "warp_score": round(avg_warp, 4),
         "is_warped": is_warped,
         "detail": f"Edge density {avg_warp:.3f} — {'warping artifacts detected' if is_warped else 'clean boundaries'}",
-    }
+    })
 
 
 def detect_image_blur(frames: List[np.ndarray]) -> dict:
@@ -184,11 +184,11 @@ def detect_image_blur(frames: List[np.ndarray]) -> dict:
         sharpness_vals.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
     avg_sharpness = float(np.mean(sharpness_vals)) if sharpness_vals else 0
     is_blurry = avg_sharpness < 40
-    return {
+    return to_python({
         "sharpness": round(avg_sharpness, 1),
         "is_blurry": is_blurry,
         "detail": f"Sharpness {avg_sharpness:.0f} — {'BLURRY INPUT DETECTED' if is_blurry else 'sharp'}",
-    }
+    })
 
 
 def analyze_deepfake(frames: List[np.ndarray]) -> dict:
@@ -200,14 +200,11 @@ def analyze_deepfake(frames: List[np.ndarray]) -> dict:
 
     # FIX #10: Hard gate — blurry input is adversarial or unusable
     if blur["is_blurry"]:
-        return {
-            "score": 20,
-            "deepfake_probability": 80,
-            "status": "FAIL",
-            "flags_triggered": 4,
+        return to_python({
+            "score": 20, "deepfake_probability": 80, "status": "FAIL", "flags_triggered": 4,
             "signals": {"frequency": freq, "landmark_jitter": jitter, "optical_flow": flow, "facial_warping": warp, "blur": blur},
-            "detail": f"HARD FAIL: Blurry input detected (sharpness={blur['sharpness']:.0f}) — possible adversarial manipulation",
-        }
+            "detail": f"HARD FAIL: Blurry input (sharpness={blur['sharpness']:.0f}) — possible adversarial manipulation",
+        })
 
     # Count suspicious signals — FIX: use .get() safely on all signal dicts
     flags = [
@@ -237,7 +234,7 @@ def analyze_deepfake(frames: List[np.ndarray]) -> dict:
     # Invert for safety score
     score = max(0, 100 - deepfake_probability)
 
-    return {
+    return to_python({
         "score": score,
         "deepfake_probability": deepfake_probability,
         "status": status,
@@ -250,4 +247,4 @@ def analyze_deepfake(frames: List[np.ndarray]) -> dict:
             "blur": blur,
         },
         "detail": f"{flag_count}/4 deepfake signals triggered — {status}",
-    }
+    })
