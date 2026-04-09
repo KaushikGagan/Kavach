@@ -5,6 +5,7 @@ Layer 5: Risk Scoring Engine
 - Explainable verdict with reason codes
 - Fallback to human review on low confidence
 """
+from layers.utils import to_python
 
 WEIGHTS = {
     "face_match": 0.30,
@@ -173,7 +174,7 @@ def _build_reason(face_match, liveness, deepfake, behavior, verdict) -> str:
 
 def _build_verdict(verdict, risk_score, confidence, face_match, liveness,
                    deepfake, behavior, reason, action, weighted_score=None) -> dict:
-    return {
+    return to_python({
         "verdict": verdict,
         "risk_score": risk_score,
         "confidence": confidence,
@@ -193,6 +194,7 @@ def _build_verdict(verdict, risk_score, confidence, face_match, liveness,
                 "detail": liveness.get("detail", ""),
                 "weight": f"{int(WEIGHTS['liveness']*100)}%",
                 "signals": liveness.get("signals", {}),
+                "spoof_risk": liveness.get("spoof_risk", 0),
             },
             "deepfake": {
                 "score": deepfake.get("score", 0),
@@ -209,4 +211,4 @@ def _build_verdict(verdict, risk_score, confidence, face_match, liveness,
                 "signals": behavior.get("signals", {}),
             },
         },
-    }
+    })
