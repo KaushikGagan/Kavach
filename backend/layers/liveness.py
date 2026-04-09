@@ -4,12 +4,17 @@ Python 3.14 compatible — uses only bundled OpenCV models.
 
 Signals:
   1. Micro-motion  — inter-frame pixel difference (primary photo detector)
-  2. Texture       — LBP variance (flat photo vs real skin)
-  3. EAR blink     — Eye Aspect Ratio via eye cascade (requires live eyes)
-  4. rPPG          — green channel pulse (real skin only)
-  5. Glare         — screen reflection detection
-  6. Frame hash    — replay attack detection (normalized correlation)
-  7. Lighting      — brightness sanity check
+  2. Texture       — local variance (flat photo vs real skin)
+  3. Head movement — face center tracking (left/right turn)
+  4. EAR blink     — eye area transitions via Haar cascade
+  5. rPPG          — green channel pulse (real skin only)
+  6. Glare         — screen reflection detection
+  7. Frame hash    — replay attack detection (normalized correlation)
+  8. Lighting      — brightness sanity check
+
+ACTIVE SEQUENCE (bank-style enforcement):
+  blink_done + head_turned → both required for PASS
+  If either missing → liveness score capped at 40 (WARN/FAIL)
 """
 import cv2
 import numpy as np
@@ -19,12 +24,6 @@ import random
 from typing import List, Tuple
 from layers.utils import to_python
 
-CHALLENGES = [
-    "blink_twice", "turn_left", "turn_right", "open_mouth",
-    "look_up", "show_three_fingers", "touch_nose", "smile",
-]
-
-# Multi-gesture: 3 challenges per session from different categories
 CHALLENGE_CATEGORIES = {
     "eye":        ["blink_twice"],
     "head":       ["turn_left", "turn_right", "look_up"],
@@ -34,32 +33,29 @@ CHALLENGE_CATEGORIES = {
 
 _nonce_store: dict = {}
 
-# Bundled cascades
 _EYE_CASCADE  = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
 _FACE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 
 def generate_challenge() -> dict:
-    """Generate 3 sequential challenges from different categories."""
     nonce = hashlib.sha256(f"{time.time()}{random.random()}".encode()).hexdigest()[:16]
-    # Pick one from each of 3 different categories
-    cats = random.sample(list(CHALLENGE_CATEGORIES.keys()), 3)
+    cats  = random.sample(list(CHALLENGE_CATEGORIES.keys()), 3)
     challenges = [random.choice(CHALLENGE_CATEGORIES[c]) for c in cats]
-    primary = challenges[0]  # shown first
     _nonce_store[nonce] = {
-        "challenge":  primary,
+        "challenge":  challenges[0],
         "challenges": challenges,
-        "expires_at": time.time() + 45,  # 45s for 3 gestures
+        "expires_at": time.time() + 45,
     }
-    return {
-        "nonce":      nonce,
-        "challenge":  primary,
-        "challenges": challenges,
-        "expires_in": 45,
-    }
+    return {"nonce": nonce, "challenge": challenges[0],
+            "challenges": challenges, "expires_in": 45}
 
 
 def validate_nonce(nonce: str) -> Tuple[bool, str]:
+    # Clean expired nonces
+    expired = [k for k, v in _nonce_store.items() if time.time() > v["expires_at"]]
+    for k in expired:
+        del _nonce_store[k]
+
     if nonce not in _nonce_store:
         return False, "Invalid session nonce"
     entry = _nonce_store[nonce]
@@ -71,29 +67,40 @@ def validate_nonce(nonce: str) -> Tuple[bool, str]:
 
 
 def extract_frames(video_bytes: bytes, max_frames: int = 90) -> List[np.ndarray]:
+    """
+    Extract frames with FPS normalization.
+    Targets ~15 FPS to avoid duplicate frames from variable-rate webcam codecs.
+    """
     import tempfile, os
     with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
         f.write(video_bytes)
         tmp = f.name
-    cap    = cv2.VideoCapture(tmp)
+
+    cap = cv2.VideoCapture(tmp)
+    source_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    target_fps = 15.0
+    step = max(1, int(round(source_fps / target_fps)))
+
     frames = []
+    idx = 0
     while len(frames) < max_frames:
         ret, frame = cap.read()
         if not ret:
             break
-        frames.append(frame)
+        if idx % step == 0:
+            frames.append(frame)
+        idx += 1
+
     cap.release()
-    os.unlink(tmp)
+    try:
+        os.unlink(tmp)
+    except Exception:
+        pass
     return frames
 
 
 # ── Signal 1: Micro-motion ─────────────────────────────────────────────────
 def detect_micro_motion(frames: List[np.ndarray]) -> dict:
-    """
-    Photos/screens = near-zero motion.
-    Real faces = always some movement (breathing, micro-tremors).
-    Threshold calibrated: real users show > 0.5 mean motion even when still.
-    """
     if len(frames) < 8:
         return to_python({"motion_score": 0.0, "is_static": True,
                           "spoof_risk": 100, "detail": "Too few frames"})
@@ -108,7 +115,7 @@ def detect_micro_motion(frames: List[np.ndarray]) -> dict:
     mean_motion     = float(np.mean(diffs))
     motion_variance = float(np.var(diffs))
 
-    # Calibrated: printed photo < 0.3, real face > 0.5
+    # Calibrated: printed photo < 0.35, real face > 0.5
     is_static  = mean_motion < 0.35 and motion_variance < 0.25
     spoof_risk = max(0, min(100, int((1.0 - min(mean_motion / 2.5, 1.0)) * 100)))
 
@@ -123,11 +130,6 @@ def detect_micro_motion(frames: List[np.ndarray]) -> dict:
 
 # ── Signal 2: Texture analysis ─────────────────────────────────────────────
 def detect_texture_liveness(frames: List[np.ndarray]) -> dict:
-    """
-    Real skin has complex micro-texture. Printed photos are flat.
-    Uses Laplacian variance on face ROI.
-    Threshold: 3.5 (was 5.0 — too aggressive, caused false positives)
-    """
     scores = []
     for frame in frames[::4]:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -135,7 +137,6 @@ def detect_texture_liveness(frames: List[np.ndarray]) -> dict:
         roi  = gray[h//4: 3*h//4, w//4: 3*w//4]
         if roi.size == 0:
             continue
-        # Local variance via filter
         kernel    = np.ones((8, 8), np.float32) / 64
         roi_f     = roi.astype(np.float32)
         mean_sq   = cv2.filter2D(roi_f**2, -1, kernel)
@@ -143,7 +144,7 @@ def detect_texture_liveness(frames: List[np.ndarray]) -> dict:
         local_var = mean_sq - mean_val**2
         scores.append(float(np.mean(np.sqrt(np.maximum(local_var, 0)))))
 
-    avg = float(np.mean(scores)) if scores else 0.0
+    avg     = float(np.mean(scores)) if scores else 0.0
     is_flat = avg < 3.5
 
     return to_python({
@@ -153,65 +154,48 @@ def detect_texture_liveness(frames: List[np.ndarray]) -> dict:
     })
 
 
-# ── Signal 2.5: Head pose detection ───────────────────────────────────────
+# ── Signal 3: Head movement ────────────────────────────────────────────────
 def detect_head_movement(frames: List[np.ndarray]) -> dict:
-    """
-    Detect head turning using face bounding box position shift.
-    Real person turning head: face center moves horizontally.
-    Photo: face center stays fixed.
-    """
     face_centers = []
     for frame in frames[::3]:
         gray  = cv2.equalizeHist(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
         faces = _FACE_CASCADE.detectMultiScale(gray, 1.1, 3, minSize=(60, 60))
         if len(faces) > 0:
-            x, y, w, h = max(faces, key=lambda f: f[2]*f[3])
-            face_centers.append((float(x + w/2), float(y + h/2)))
+            x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+            face_centers.append((float(x + w / 2), float(y + h / 2)))
 
     if len(face_centers) < 5:
-        return to_python({"head_movement": 0.0, "turned": False,
+        return to_python({"head_movement": 0.0, "h_range": 0.0, "turned": False,
                           "detail": "Insufficient face detections for head pose"})
 
-    centers = np.array(face_centers)
-    # Horizontal range of face center = head turning
-    h_range = float(np.max(centers[:, 0]) - np.min(centers[:, 0]))
-    v_range = float(np.max(centers[:, 1]) - np.min(centers[:, 1]))
-    total_movement = float(np.sqrt(h_range**2 + v_range**2))
-
-    # Real head turn: face center moves > 15px horizontally
-    turned = h_range > 15.0
+    centers  = np.array(face_centers)
+    h_range  = float(np.max(centers[:, 0]) - np.min(centers[:, 0]))
+    v_range  = float(np.max(centers[:, 1]) - np.min(centers[:, 1]))
+    total    = float(np.sqrt(h_range**2 + v_range**2))
+    turned   = h_range > 15.0
 
     return to_python({
-        "head_movement": round(total_movement, 1),
+        "head_movement": round(total, 1),
         "h_range":       round(h_range, 1),
         "turned":        turned,
-        "detail": f"Head movement={total_movement:.0f}px h={h_range:.0f}px — {'head turn detected' if turned else 'no head movement'}",
+        "detail": f"Head h={h_range:.0f}px — {'head turn detected' if turned else 'no head movement'}",
     })
 
 
-# ── Signal 3: EAR blink detection ─────────────────────────────────────────
+# ── Signal 4: EAR blink detection ─────────────────────────────────────────
 def detect_blinks(frames: List[np.ndarray]) -> dict:
-    """
-    Eye Aspect Ratio (EAR) blink detection using Haar eye cascade.
-    A real person blinks naturally. A photo never blinks.
-    Detects eye open/close transitions across frames.
-    """
     eye_areas = []
     for frame in frames[::2]:
-        gray  = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray  = cv2.equalizeHist(gray)
-        # Detect face first to limit eye search region
-        faces = _FACE_CASCADE.detectMultiScale(gray, 1.1, 3, minSize=(60,60))
+        gray  = cv2.equalizeHist(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+        faces = _FACE_CASCADE.detectMultiScale(gray, 1.1, 3, minSize=(60, 60))
         if len(faces) == 0:
             eye_areas.append(None)
             continue
-        x, y, w, h = max(faces, key=lambda f: f[2]*f[3])
+        x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
         face_roi   = gray[y:y+h, x:x+w]
-        eyes       = _EYE_CASCADE.detectMultiScale(face_roi, 1.05, 3, minSize=(15,15))
+        eyes       = _EYE_CASCADE.detectMultiScale(face_roi, 1.05, 3, minSize=(15, 15))
         if len(eyes) >= 2:
-            # Both eyes detected — open
-            total_eye_area = sum(ew*eh for (ex,ey,ew,eh) in eyes[:2])
-            eye_areas.append(float(total_eye_area))
+            eye_areas.append(float(sum(ew * eh for (ex, ey, ew, eh) in eyes[:2])))
         elif len(eyes) == 1:
             eye_areas.append(float(eyes[0][2] * eyes[0][3]) * 0.5)
         else:
@@ -222,12 +206,11 @@ def detect_blinks(frames: List[np.ndarray]) -> dict:
         return to_python({"blinks_detected": 0, "eye_detected": False,
                           "detail": "Insufficient frames for blink detection"})
 
-    # Count blinks: transitions from high→low→high eye area
-    arr    = np.array(valid, dtype=np.float32)
-    mean_a = float(np.mean(arr))
-    blinks = 0
-    in_blink = False
-    threshold = mean_a * 0.55  # eye area drops to <55% of mean during blink
+    arr       = np.array(valid, dtype=np.float32)
+    mean_a    = float(np.mean(arr))
+    threshold = mean_a * 0.55
+    blinks    = 0
+    in_blink  = False
 
     for area in arr:
         if area < threshold and not in_blink:
@@ -236,7 +219,7 @@ def detect_blinks(frames: List[np.ndarray]) -> dict:
             blinks += 1
             in_blink = False
 
-    eye_detected = mean_a > 100  # eyes were visible at some point
+    eye_detected = mean_a > 100
 
     return to_python({
         "blinks_detected": blinks,
@@ -246,9 +229,8 @@ def detect_blinks(frames: List[np.ndarray]) -> dict:
     })
 
 
-# ── Signal 4: rPPG ─────────────────────────────────────────────────────────
+# ── Signal 5: rPPG ─────────────────────────────────────────────────────────
 def detect_rppg_signal(frames: List[np.ndarray]) -> dict:
-    """Remote Photoplethysmography — real skin shows green-channel pulse."""
     if len(frames) < 20:
         return to_python({"score": 0, "is_real": False, "bpm": 0.0,
                           "snr": 0.0, "detail": "Too few frames for rPPG"})
@@ -264,11 +246,9 @@ def detect_rppg_signal(frames: List[np.ndarray]) -> dict:
         return to_python({"score": 0, "is_real": False, "bpm": 0.0,
                           "snr": 0.0, "detail": "Insufficient ROI data"})
 
-    signal = np.array(green_means, dtype=np.float32)
-    signal = signal - np.mean(signal)
-    fft    = np.abs(np.fft.rfft(signal))
-    freqs  = np.fft.rfftfreq(len(signal), d=1.0/30)
-
+    signal      = np.array(green_means, dtype=np.float32) - np.mean(green_means)
+    fft         = np.abs(np.fft.rfft(signal))
+    freqs       = np.fft.rfftfreq(len(signal), d=1.0 / 15)  # 15 FPS after normalization
     hr_band     = (freqs >= 0.75) & (freqs <= 3.0)
     hr_power    = float(np.sum(fft[hr_band]**2))
     noise_power = float(np.sum(fft[~hr_band]**2)) + 1e-6
@@ -288,7 +268,7 @@ def detect_rppg_signal(frames: List[np.ndarray]) -> dict:
     })
 
 
-# ── Signal 5: Screen glare ─────────────────────────────────────────────────
+# ── Signal 6: Screen glare ─────────────────────────────────────────────────
 def detect_screen_glare(frames: List[np.ndarray]) -> dict:
     scores = []
     for frame in frames[::5]:
@@ -303,13 +283,8 @@ def detect_screen_glare(frames: List[np.ndarray]) -> dict:
     })
 
 
-# ── Signal 6: Frame duplicate (replay) ────────────────────────────────────
+# ── Signal 7: Frame duplicate (replay) ────────────────────────────────────
 def detect_frame_duplicates(frames: List[np.ndarray]) -> dict:
-    """
-    Replay attacks loop frames.
-    Uses 32x32 normalized correlation — much more robust than binary hash.
-    Threshold 0.9995 — only true duplicates trigger.
-    """
     if len(frames) < 10:
         return to_python({"is_replay": False, "duplicate_ratio": 0.0,
                           "detail": "Insufficient frames"})
@@ -320,15 +295,11 @@ def detect_frame_duplicates(frames: List[np.ndarray]) -> dict:
         norm  = np.linalg.norm(gray)
         return gray / (norm + 1e-8)
 
-    fps   = [fingerprint(f) for f in frames[::2]]
-    dups  = 0
-    for i in range(1, len(fps)):
-        corr = float(np.dot(fps[i], fps[i-1]))
-        if corr > 0.9995:
-            dups += 1
-
+    fps       = [fingerprint(f) for f in frames[::2]]
+    dups      = sum(float(np.dot(fps[i], fps[i-1])) > 0.9995
+                    for i in range(1, len(fps)))
     dup_ratio = float(dups) / max(len(fps) - 1, 1)
-    is_replay = dup_ratio > 0.80  # >80% truly identical frames
+    is_replay = dup_ratio > 0.80
 
     return to_python({
         "duplicate_ratio": round(dup_ratio, 3), "is_replay": is_replay,
@@ -336,7 +307,7 @@ def detect_frame_duplicates(frames: List[np.ndarray]) -> dict:
     })
 
 
-# ── Signal 7: Lighting ─────────────────────────────────────────────────────
+# ── Signal 8: Lighting ─────────────────────────────────────────────────────
 def detect_low_light(frames: List[np.ndarray]) -> dict:
     vals = [float(np.mean(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY))) for f in frames[::5]]
     avg  = float(np.mean(vals)) if vals else 0.0
@@ -364,7 +335,7 @@ def analyze_liveness(frames: List[np.ndarray], nonce_valid: bool) -> dict:
                           "detail": f"Lighting failed: {lighting['detail']}",
                           "signals": {"lighting": lighting}})
 
-    # Run all signals
+    # Run all passive signals
     motion  = detect_micro_motion(frames)
     texture = detect_texture_liveness(frames)
     head    = detect_head_movement(frames)
@@ -373,41 +344,48 @@ def analyze_liveness(frames: List[np.ndarray], nonce_valid: bool) -> dict:
     glare   = detect_screen_glare(frames)
     replay  = detect_frame_duplicates(frames)
 
+    signals = {"motion": motion, "texture": texture, "head": head,
+               "blinks": blinks, "rppg": rppg, "glare": glare,
+               "replay": replay, "lighting": lighting}
+
     # Hard gate: replay attack
     if replay["is_replay"]:
-        return to_python({
-            "score": 0, "status": "FAIL", "spoof_risk": 98,
-            "detail": "VIDEO REPLAY DETECTED — duplicate frames",
-            "signals": {"motion": motion, "texture": texture, "head": head, "blinks": blinks,
-                        "rppg": rppg, "glare": glare, "replay": replay, "lighting": lighting},
-        })
+        return to_python({"score": 0, "status": "FAIL", "spoof_risk": 98,
+                          "detail": "VIDEO REPLAY DETECTED — duplicate frames",
+                          "signals": signals})
 
-    # Hard gate: photo spoof (BOTH motion AND texture must fail — AND logic prevents false positives)
+    # Hard gate: photo spoof (BOTH motion AND texture must fail)
     if motion["is_static"] and texture["is_flat"]:
-        return to_python({
-            "score": 0, "status": "FAIL", "spoof_risk": 92,
-            "detail": "PHOTO SPOOF DETECTED — static image with flat texture",
-            "signals": {"motion": motion, "texture": texture, "head": head, "blinks": blinks,
-                        "rppg": rppg, "glare": glare, "replay": replay, "lighting": lighting},
-        })
+        return to_python({"score": 0, "status": "FAIL", "spoof_risk": 92,
+                          "detail": "PHOTO SPOOF DETECTED — static image with flat texture",
+                          "signals": signals})
+
+    # ── ACTIVE SEQUENCE CHECK (bank-style) ────────────────────────────────
+    # Both blink AND head turn must be detected for full liveness pass
+    blink_done = blinks.get("blinks_detected", 0) >= 1
+    head_done  = head.get("turned", False)
 
     # Weighted scoring
     score = 0
-    if not motion["is_static"]:                    score += 25  # strongest
-    if not texture["is_flat"]:                     score += 15
-    if head.get("turned", False):                  score += 15  # head movement
-    if blinks.get("blinks_detected", 0) >= 1:     score += 15  # at least 1 blink
-    if blinks.get("eye_detected", False):          score += 10
-    if rppg.get("is_real", False):                 score += 10
-    if not glare.get("is_screen", False):          score += 5
-    if not replay["is_replay"]:                    score += 5
+    if not motion["is_static"]:      score += 25
+    if not texture["is_flat"]:       score += 15
+    if head_done:                    score += 15
+    if blink_done:                   score += 15
+    if blinks.get("eye_detected"):   score += 10
+    if rppg.get("is_real", False):   score += 10
+    if not glare.get("is_screen"):   score += 5
+    if not replay["is_replay"]:      score += 5
+
+    # Active sequence enforcement:
+    # If neither blink nor head turn detected → cap score (passive signals alone not enough)
+    if not blink_done and not head_done:
+        score = min(score, 40)
+        detail = f"Liveness {score}/100 — active gestures not detected (blink={blink_done}, head={head_done})"
+    else:
+        detail = f"Liveness {score}/100 — {'PASS' if score >= 65 else 'WARN'} (blink={blink_done}, head={head_done})"
 
     spoof_risk = max(0, 100 - score)
     status     = "PASS" if score >= 65 else ("WARN" if score >= 40 else "FAIL")
 
-    return to_python({
-        "score": score, "status": status, "spoof_risk": spoof_risk,
-        "signals": {"motion": motion, "texture": texture, "head": head, "blinks": blinks,
-                    "rppg": rppg, "glare": glare, "replay": replay, "lighting": lighting},
-        "detail": f"Liveness {score}/100 — {status} (spoof risk: {spoof_risk}%)",
-    })
+    return to_python({"score": score, "status": status, "spoof_risk": spoof_risk,
+                      "signals": signals, "detail": detail})

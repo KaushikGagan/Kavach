@@ -29,8 +29,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Session store: nonce -> start_time
+# Session store: nonce -> start_time (auto-cleaned on each request)
 _session_times: dict = {}
+_SESSION_TTL = 120  # seconds
+
+
+def _clean_sessions():
+    now = time.time()
+    expired = [k for k, v in _session_times.items() if now - v > _SESSION_TTL]
+    for k in expired:
+        del _session_times[k]
 
 
 # ── API Routes ────────────────────────────────────────────────────────────────
@@ -55,13 +63,14 @@ async def verify_kyc(
     nonce: str = Form(...),
     device_id: Optional[str] = Form(None),
 ):
+    _clean_sessions()
     submission_time = time.time()
     session_start = _session_times.pop(nonce, submission_time - 10)
 
     nonce_valid, _ = validate_nonce(nonce)
 
     video_bytes = await video.read()
-    frames = extract_frames(video_bytes, max_frames=60)
+    frames = extract_frames(video_bytes, max_frames=90)
 
     if len(frames) < 10:
         return JSONResponse(status_code=400, content={
